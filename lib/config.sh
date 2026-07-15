@@ -107,12 +107,12 @@ setup_mega_remote() {
     echo -e "   ${C_DIM}Checking if MEGA is reachable from this network...${C_RESET}"
     if mega_reachable >/dev/null 2>&1; then
       echo -e "   ${C_RED}MEGA API is reachable (HTTP 200) but the LOGIN reply comes back EMPTY.${C_RESET}"
-      echo -e "   ${C_DIM}This is your carrier / Wi-Fi proxy blocking or truncating MEGA's login${C_RESET}"
-      echo -e "   ${C_DIM}response. It is NOT the account, the password, or the tool (the same${C_RESET}"
-      echo -e "   ${C_DIM}credentials log in fine from another network). A different rclone build${C_RESET}"
-      echo -e "   ${C_DIM}will NOT help — the portable binary IS the official full rclone.${C_RESET}"
-      echo -e "   ${C_BOLD}Fix: enable a VPN (e.g. Cloudflare WARP / Proton / any VPN app) and retry,${C_RESET}"
-      echo -e "   ${C_BOLD}   or switch to a different Wi-Fi / mobile data connection.${C_RESET}"
+      echo -e "   ${C_DIM}Most likely cause when a VPN also fails: a TLS/CA issue in this environment.${C_RESET}"
+      echo -e "   ${C_DIM}If you run the tool inside a PRoot/distro (Ubuntu), the CA bundle must be${C_RESET}"
+      echo -e "   ${C_DIM}the distro's, not Termux's. Run inside the distro:${C_RESET}"
+      echo -e "   ${C_BOLD}   apt-get install -y ca-certificates${C_RESET}"
+      echo -e "   ${C_DIM}then re-run the tool (it auto-picks the correct bundle and retries).${C_RESET}"
+      echo -e "   ${C_DIM}It is NOT the account or password (same creds log in fine elsewhere).${C_RESET}"
     else
       local code; code="$(mega_reachable 2>/dev/null)"
       echo -e "   ${C_RED}MEGA API is NOT reachable from this network (HTTP ${code:-no response}).${C_RESET}"
@@ -141,6 +141,19 @@ test_remote() {
     [ -n "$reason" ] && warn "   -> ${reason}"
     [ "$i" -lt 5 ] && sleep 8
   done
+  # Fallback: inside a PRoot/distro the forced CA bundle we picked may be wrong
+  # (Termux path used by mistake). Retry once letting rclone use the OS default
+  # trust store, which usually just works.
+  if [ -n "${RCLONE_CACERT:-}" ]; then
+    info "Retrying with OS default CA trust store (fallback)..."
+    out="$(env -u RCLONE_CACERT -u SSL_CERT_FILE -u CURL_CERT_FILE \
+            timeout 60 rclone about "${r}:" --low-level-retries 10 --retries 3 --disable-http-keep-alives 2>&1)"
+    if echo "$out" | grep -q "Total:"; then
+      echo "$out" | grep -E "Total:|Used:|Free:" | sed 's/^/   /'
+      ok "Connected using the OS default CA store (your forced bundle was wrong)."
+      return 0
+    fi
+  fi
   return 1
 }
 
