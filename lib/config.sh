@@ -104,11 +104,18 @@ setup_mega_remote() {
     ok "MEGA connection successful."
   else
     warn "Connection test did not pass yet."
-    echo -e "   ${C_DIM}Common causes & fixes:${C_RESET}"
-    echo -e "   ${C_DIM}• TLS/CA issue: run  pkg install ca-certificates  then retry${C_RESET}"
-    echo -e "   ${C_DIM}• MEGA rate-limiting: wait a few minutes, then retry${C_RESET}"
-    echo -e "   ${C_DIM}• Network/proxy blocking MEGA: try a different Wi-Fi/mobile data${C_RESET}"
-    echo -e "   ${C_DIM}Run menu option 13 'Diagnostics' for details. Credentials are saved.${C_RESET}"
+    echo -e "   ${C_DIM}Checking if MEGA is reachable from this network...${C_RESET}"
+    if mega_reachable >/dev/null 2>&1; then
+      echo -e "   ${C_DIM}MEGA API is reachable — likely temporary login throttling. Wait a few minutes and retry.${C_RESET}"
+    else
+      local code; code="$(mega_reachable 2>/dev/null)"
+      echo -e "   ${C_RED}MEGA API is NOT reachable from this network (HTTP ${code:-no response}).${C_RESET}"
+      echo -e "   ${C_DIM}This is a network/region block on MEGA, not a tool bug. Try:${C_RESET}"
+      echo -e "   ${C_DIM}• A different Wi-Fi or mobile data connection${C_RESET}"
+      echo -e "   ${C_DIM}• A VPN (MEGA is blocked in some regions/carriers)${C_RESET}"
+      echo -e "   ${C_DIM}• Open https://mega.nz in your device browser to confirm access${C_RESET}"
+    fi
+    echo -e "   ${C_DIM}Run menu option 13 'Diagnostics' for full details. Credentials are saved.${C_RESET}"
   fi
 
   # --- Register remote into REMOTES so backups can find it ---
@@ -146,6 +153,65 @@ register_remote() {
     set_conf_value REMOTES "$REMOTES $r"
   fi
   ok "Remote '$r' registered for backups."
+}
+
+# --- Is MEGA actually reachable from this network? (proves block vs creds) ---
+mega_reachable() {
+  # returns 0 if the MEGA API endpoint answers, 1 if blocked/unreachable
+  local code
+  if command -v curl >/dev/null 2>&1; then
+    code="$(curl -sS -m 15 -o /dev/null -w '%{http_code}' 'https://g.api.mega.co.nz/cs' 2>/dev/null)"
+  elif command -v wget >/dev/null 2>&1; then
+    code="$(wget -q -S -O /dev/null 'https://g.api.mega.co.nz/cs' 2>&1 | grep -i 'HTTP/' | tail -1 | awk '{print $2}')"
+  else
+    return 2   # cannot test
+  fi
+  [ "$code" = "200" ] && return 0
+  echo "$code"
+  return 1
+}
+
+# --- Manage MEGA accounts: list / add / delete ---
+manage_accounts() {
+  while true; do
+    banner; title "  MEGA ACCOUNTS"; hr
+    load_config
+    local i=1; declare -gA ACCT_MAP; ACCT_MAP=()
+    local r
+    while IFS= read -r r; do
+      [ -z "$r" ] && continue
+      ACCT_MAP[$i]="$r"; echo -e "  ${C_GREEN}$i)${C_RESET} $r"; i=$((i+1))
+    done < <(rclone listremotes 2>/dev/null | sed 's/:$//')
+    [ "$((i-1))" -eq 0 ] && echo -e "  ${C_DIM}(no accounts configured)${C_RESET}"
+    hr
+    echo -e "  ${C_GREEN}a)${C_RESET} Add new account"
+    echo -e "  ${C_GREEN}d)${C_RESET} Delete account"
+    echo -e "  ${C_GREEN}b)${C_RESET} Back"
+    local c; c="$(ask 'Select' 'b')"
+    case "$c" in
+      a|A)
+        setup_mega_remote "$(ask 'Remote name (e.g. mega)' 'mega')"
+        pause
+        ;;
+      d|D)
+        [ "$((i-1))" -eq 0 ] && { warn "Nothing to delete."; sleep 1; continue; }
+        local n name
+        n="$(ask 'Enter number of account to delete' '')"
+        name="${ACCT_MAP[$n]:-}"
+        [ -z "$name" ] && { warn "Invalid number."; sleep 1; continue; }
+        if confirm "Delete remote '$name'? Its backups will stop."; then
+          rclone config delete "$name" 2>/dev/null && ok "Deleted remote '$name'."
+          # remove from REMOTES list
+          local nr=""
+          for r in $REMOTES; do [ "$r" != "$name" ] && nr="${nr:+$nr }$r"; done
+          set_conf_value REMOTES "${nr:-mega}"
+          load_config
+        fi
+        pause
+        ;;
+      *) return ;;
+    esac
+  done
 }
 
 self_test() {

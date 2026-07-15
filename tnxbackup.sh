@@ -66,7 +66,7 @@ main_menu() {
        8) show_history ;;
        9) settings_menu; load_config ;;
        10) self_test ;;
-       11) setup_mega_remote ""; pause ;;
+       11) manage_accounts ;;
        12) self_update; pause ;;
        13) tool_diag; pause ;;
        0) echo -e "${C_CYAN}Goodbye!${C_RESET}"; exit 0 ;;
