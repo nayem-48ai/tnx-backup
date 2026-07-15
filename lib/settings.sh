@@ -55,6 +55,8 @@ add_remote_flow() {
 self_update() {
   require_cmd git || { err "git not installed. Run: pkg install git"; return 1; }
   [ -d "$TNX_ROOT/.git" ] || { err "Not a git checkout - cannot auto-update."; return 1; }
+  # Ignore file-mode (chmod +x) differences so the pull never conflicts on perms.
+  git -C "$TNX_ROOT" config core.fileMode false 2>/dev/null || true
   info "Fetching updates from GitHub..."
   git -C "$TNX_ROOT" fetch --quiet origin 2>&1 | tail -3
   local behind; behind="$(git -C "$TNX_ROOT" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)"
@@ -64,8 +66,16 @@ self_update() {
   info "Pulling $behind commit(s)..."
   if git -C "$TNX_ROOT" pull --ff-only 2>&1 | tail -6; then
     ok "Updated. Restart the tool (./tnxbackup.sh) to use the new version."
+    return 0
+  fi
+  # Fallback: discard local edits to the tool's own code (remotes in
+  # config/rclone.conf are gitignored and safe), then pull again.
+  warn "Local code changes blocked the update - discarding them (your remotes are safe)..."
+  git -C "$TNX_ROOT" checkout -- lib/ tnxbackup.sh install.sh 2>/dev/null
+  if git -C "$TNX_ROOT" pull --ff-only 2>&1 | tail -6; then
+    ok "Updated. Restart the tool (./tnxbackup.sh) to use the new version."
   else
-    err "Update failed (local changes conflict?). Try: cd $TNX_ROOT && git stash && git pull"
+    err "Update still failed. Run manually: cd $TNX_ROOT && git stash && git pull"
     return 1
   fi
 }

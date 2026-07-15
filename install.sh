@@ -20,11 +20,13 @@ fi
 
 if [ -d "$DIR/.git" ]; then
   echo "==> Updating existing install at $DIR"
+  git -C "$DIR" config core.fileMode false 2>/dev/null || true
   git -C "$DIR" pull --ff-only
 else
   echo "==> Cloning $REPO into $DIR"
   rm -rf "$DIR"
   git clone "$REPO" "$DIR"
+  git -C "$DIR" config core.fileMode false 2>/dev/null || true
 fi
 
 chmod +x "$DIR/tnxbackup.sh" "$DIR/lib/"*.sh
