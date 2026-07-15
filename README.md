@@ -40,6 +40,15 @@ A clean, menu-driven **Termux** tool to back up your Android device storage to *
 static **rclone** (and **jq**) binary for your CPU into its own `bin/` folder — no root,
 no system packages, nothing global. You only need **internet + git + unzip**.
 
+### One-liner (new user)
+```bash
+git clone https://github.com/nayem-48ai/tnx-backup && cd tnx-backup && ./tnxbackup.sh
+```
+That's the only command a new user needs — clone, enter the folder, and the tool
+self-bootstraps (deps, `rclone`, MEGA setup) and opens the menu.
+
+<details><summary>Step-by-step (same thing, expanded)</summary>
+
 ```bash
 # 1. Grant storage access (Termux)
 termux-setup-storage
@@ -52,18 +61,25 @@ chmod +x tnxbackup.sh lib/*.sh
 # 3. Run — it self-bootstraps everything else
 ./tnxbackup.sh
 ```
+</details>
 
 That's it. Anyone can clone and run on their own device with their own MEGA account.
 
-### What it auto-fetches (into `./bin`, ignored by git)
+### What it auto-fetches
+- **On Termux:** the tool installs **`rclone`** via `pkg install rclone` (the cgo build,
+  which uses the OS resolver and works even when `/etc/resolv.conf` is missing/unwritable
+  — the static binary cannot resolve DNS there). `jq` is downloaded into `./bin`.
+- **On desktop / PRoot / macOS:** it downloads the official **static rclone** (and `jq`)
+  into its own `./bin/` folder — no root, no system packages.
+
 | Tool | Why | Source |
 |---|---|---|
-| `rclone` | MEGA transfer engine | downloads.rclone.org (official static build, **includes MEGA**) |
-| `jq` | JSON parsing (history/quota) | jqlang GitHub releases |
+| `rclone` | MEGA transfer engine | Termux: `pkg install rclone` · else: downloads.rclone.org (official static build, **includes MEGA**) |
+| `jq` | JSON parsing (history/quota) | jqlang GitHub releases (into `./bin`) |
 
 > ⚠️ Note: some distro package managers (e.g. Debian/Ubuntu `apt`) ship an rclone
-> build **without** the MEGA backend. That's exactly why this tool fetches the
-> **official** static rclone itself — so MEGA always works.
+> build **without** the MEGA backend — which is why, off Termux, this tool fetches the
+> **official** static rclone itself so MEGA always works.
 
 ### Optional
 - `pigz` — faster multi-core zip (falls back to `gzip` automatically if absent).
