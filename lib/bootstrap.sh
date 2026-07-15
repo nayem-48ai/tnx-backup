@@ -87,6 +87,13 @@ ensure_rclone() {
   fi
 }
 
+# --- Force HTTP/1.1 for rclone ---
+# Some mobile carriers / transparent proxies mangle HTTP/2 (chunked) responses
+# from MEGA, which makes rclone receive an empty body and fail with
+# "unexpected end of JSON input". Forcing HTTP/1.1 (content-length framed)
+# avoids that truncation. Safe and applies to all rclone calls.
+export RCLONE_DISABLE_HTTP2=true
+
 # --- TLS / CA certificates ---
 # The static rclone build does NOT bundle CA certs. On Termux, if the
 # ca-certificates package is missing, TLS to MEGA fails and rclone returns

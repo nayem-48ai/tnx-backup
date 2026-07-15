@@ -86,24 +86,22 @@ tool_diag() {
   rclone listremotes 2>/dev/null | sed 's/^/   /' || echo "   (none / error)"
   hr
   echo -e "  ${C_BOLD}Network reachability to MEGA:${C_RESET}"
-  if command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1; then
-    local code; code="$( (command -v curl >/dev/null 2>&1 && curl -sS -m 15 -o /dev/null -w '%{http_code}' 'https://g.api.mega.co.nz/cs') || wget -q -S -O /dev/null 'https://g.api.mega.co.nz/cs' 2>&1 | grep -i 'HTTP/' | tail -1 | awk '{print $2}') 2>/dev/null)"
-    if [ "$code" = "200" ]; then
-      echo -e "   ${C_GREEN}MEGA API reachable (HTTP 200)${C_RESET}"
-    else
-      echo -e "   ${C_RED}MEGA API NOT reachable (HTTP ${code:-no response})${C_RESET} -> network/region block"
-      echo -e "   ${C_DIM}The login error is caused by this block, not by the tool or your password.${C_RESET}"
-    fi
+  local code; code="$(mega_http_code)"
+  if [ "$code" = "200" ]; then
+    echo -e "   ${C_GREEN}MEGA API reachable (HTTP 200)${C_RESET}"
   else
-    echo -e "   ${C_YELLOW}(curl/wget unavailable - cannot test reachability)${C_RESET}"
+    echo -e "   ${C_RED}MEGA API NOT reachable (HTTP ${code:-no response})${C_RESET} -> network/region block"
+    echo -e "   ${C_DIM}The login error is caused by this block, not by the tool or your password.${C_RESET}"
   fi
   hr
   echo -e "  ${C_BOLD}Network login test to MEGA:${C_RESET}"
   local r; r="$(rclone listremotes 2>/dev/null | head -1 | tr -d ':')"
   if [ -n "$r" ]; then
-    echo -e "   testing remote '${r}'..."
-    out="$(timeout 45 rclone about "${r}:" 2>&1)"
-    echo "$out" | grep -E "Total:|error|Error|CRITICAL|denied|failed" | sed 's/^/   /'
+    echo -e "   testing remote '${r}' (saving raw capture to logs/mega-debug.log)..."
+    out="$(timeout 60 rclone about "${r}:" --dump-bodies --low-level-retries 3 --retries 1 2>&1 | tee "$TNX_LOGDIR/mega-debug.log")"
+    echo "$out" | grep -E "Total:|error|Error|CRITICAL|denied|failed|end of JSON" | sed 's/^/   /'
+    echo -e "   ${C_DIM}Capture saved: $TNX_LOGDIR/mega-debug.log (last 12 lines:)${C_RESET}"
+    tail -n 12 "$TNX_LOGDIR/mega-debug.log" 2>/dev/null | sed 's/^/   /'
   else
     echo -e "   ${C_YELLOW}No remote configured yet - use menu 11.${C_RESET}"
   fi
