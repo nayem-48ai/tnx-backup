@@ -47,10 +47,6 @@ settings_menu() {
 add_remote_flow() {
   local name; name="$(ask 'New remote name (e.g. mega2)' '')"
   [ -z "$name" ] && { warn "Cancelled."; return; }
-  setup_mega_remote "$name"
-  if ! echo "$REMOTES" | grep -qw "$name"; then
-    set_conf_value REMOTES "$REMOTES $name"
-    ok "Added '$name' to remotes list."
-  fi
+  setup_mega_remote "$name"   # handles creation, test, and registration
   pause
 }

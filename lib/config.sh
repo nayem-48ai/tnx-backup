@@ -88,19 +88,62 @@ setup_mega_remote() {
   local email pass
   email="$(ask 'MEGA email' '')"
   read -rsp "$(echo -e "${C_CYAN}MEGA password${C_RESET}: ")" pass; echo
+  [ -z "$email" ] && { err "Email cannot be empty."; return 1; }
+  [ -z "$pass" ]  && { err "Password cannot be empty."; return 1; }
+
   info "Creating rclone remote '$rname'..."
-  if rclone config create "$rname" mega user "$email" pass "$pass" >/dev/null 2>&1; then
-    ok "Remote '$rname' created."
-    info "Testing connection..."
-    if rclone about "${rname}:" >/dev/null 2>&1; then
-      ok "MEGA connection successful."
-    else
-      warn "Remote created but connection test failed. Check credentials/network."
-    fi
-  else
+  # Force-obscure the password (version-safe across rclone builds)
+  if ! rclone config create "$rname" mega user "$email" pass "$pass" --obscure >/dev/null 2>&1; then
     err "Failed to create remote."
     return 1
   fi
+  ok "Remote '$rname' created."
+
+  # --- Connection test with retries (MEGA can rate-limit fresh logins) ---
+  if test_remote "$rname"; then
+    ok "MEGA connection successful."
+  else
+    warn "Connection test did not pass yet."
+    echo -e "   ${C_DIM}This is often temporary MEGA login rate-limiting after several"
+    echo -e "   logins in a short time. Wait a few minutes, then use menu option 10"
+    echo -e "   (Self-test) or 11 again. Your credentials are saved.${C_RESET}"
+  fi
+
+  # --- Register remote into REMOTES so backups can find it ---
+  register_remote "$rname"
+  return 0
+}
+
+# Retry connection test; prints the real error on final failure
+test_remote() {
+  local r="$1" i out
+  for i in 1 2 3; do
+    info "Testing connection (attempt $i/3)..."
+    out="$(timeout 45 rclone about "${r}:" --low-level-retries 3 --contimeout 20s 2>&1)"
+    if echo "$out" | grep -q "Total:"; then
+      echo "$out" | grep -E "Total:|Used:|Free:" | sed 's/^/   /'
+      return 0
+    fi
+    local reason; reason="$(echo "$out" | grep -iE "error|fatal|denied|failed|429|too many" | head -1)"
+    [ -n "$reason" ] && warn "   -> ${reason}"
+    sleep 5
+  done
+  return 1
+}
+
+# Add a remote name to REMOTES in the config file if not already present
+register_remote() {
+  local r="$1"
+  load_config
+  if echo " $REMOTES " | grep -q " $r "; then
+    return 0   # already registered
+  fi
+  if [ -z "$REMOTES" ] || [ "$REMOTES" = "mega" ] && ! rclone listremotes 2>/dev/null | grep -q "^mega:"; then
+    set_conf_value REMOTES "$r"       # replace default placeholder
+  else
+    set_conf_value REMOTES "$REMOTES $r"
+  fi
+  ok "Remote '$r' registered for backups."
 }
 
 self_test() {

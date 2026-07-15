@@ -29,7 +29,7 @@ list_profiles() {
 }
 
 choose_profile() {
-  declare -gA PROFILE_MAP
+  declare -gA PROFILE_MAP; PROFILE_MAP=()
   list_profiles
   local sel
   sel="$(ask 'Choose profile number' '1')"
@@ -38,7 +38,7 @@ choose_profile() {
 }
 
 choose_remote() {
-  local i=1; declare -gA REMOTE_MAP
+  local i=1; declare -gA REMOTE_MAP; REMOTE_MAP=()
   echo -e "${C_BOLD}Remotes:${C_RESET}"
   for r in $REMOTES; do
     local status="?"
