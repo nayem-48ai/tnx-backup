@@ -1,0 +1,21 @@
+# =====================================================
+#  TNx Backup - rclone filter rules (mirror mode)
+#  Order matters. First match wins.
+#  '-' = exclude, '+' = include
+#  Applied relative to SOURCE_ROOT (/sdcard)
+# =====================================================
+
+# --- Hard excludes: Android app data & obb (keep only Android/media) ---
+- /Android/data/**
+- /Android/obb/**
+
+# --- Keep everything under Android/media ---
++ /Android/media/**
+
+# --- Exclude common junk/cache (optional; comment out to keep) ---
+- **/.thumbnails/**
+- **/*.tmp
+- **/*.log.lock
+
+# --- Include everything else, INCLUDING hidden dotfiles/dotfolders ---
++ **

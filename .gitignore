@@ -1,0 +1,18 @@
+# Portable binaries auto-downloaded at runtime (do not commit)
+bin/
+
+# Runtime state
+.initialized
+logs/*.log
+logs/history.json
+reports/*.html
+reports/*.csv
+
+# rclone config lives in user's rclone config dir, never here
+*.conf.local
+logs/*.log
+logs/history.json
+!logs/.gitkeep
+reports/*.html
+reports/*.csv
+!reports/.gitkeep
