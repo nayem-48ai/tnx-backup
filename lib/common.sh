@@ -20,6 +20,20 @@ export RCLONE_CONFIG="$TNX_CONF_DIR/rclone.conf"
 
 mkdir -p "$TNX_LOGDIR" "$TNX_REPORTDIR" "$TNX_PROFILES"
 
+# --- Environment detection (native Termux vs PRoot/distro) ---
+# $PREFIX is set ONLY in native Termux (points at the Termux usr dir). Inside a
+# PRoot/distro (e.g. Ubuntu) $PREFIX is unset, and /sdcard is typically NOT bound
+# to the real Android storage -> scans come back empty. We detect this so we can
+# warn the user to run the tool from native Termux.
+detect_env() {
+  if [ -n "${PREFIX:-}" ]; then
+    TNX_ENV="termux"
+  else
+    TNX_ENV="proot_or_linux"
+  fi
+}
+detect_env
+
 # --- Colors (auto-disable if not a terminal) ---
 if [ -t 1 ]; then
   C_RESET='\033[0m'; C_BOLD='\033[1m'; C_DIM='\033[2m'

@@ -38,6 +38,10 @@ main_menu() {
   while true; do
     banner
     echo -e "  ${C_DIM}Source: $SOURCE_ROOT  |  Remotes: $REMOTES${C_RESET}"
+    if [ "$TNX_ENV" != "termux" ]; then
+      echo -e "  ${C_YELLOW}⚠ Running inside a PRoot/distro — /sdcard may be empty here.${C_RESET}"
+      echo -e "  ${C_YELLOW}  For real device backups, run this tool from NATIVE TERMUX.${C_RESET}"
+    fi
     hr
     echo -e "  ${C_GREEN}1)${C_RESET} 📊  Scan device (storage report + HTML/CSV)"
     echo -e "  ${C_GREEN}2)${C_RESET} ☁️   Full mirror backup"

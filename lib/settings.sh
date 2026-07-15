@@ -27,19 +27,21 @@ settings_menu() {
     echo -e "  ${C_GREEN}5)${C_RESET} Toggle require Wi-Fi"
     echo -e "  ${C_GREEN}6)${C_RESET} Default profile"
     echo -e "  ${C_GREEN}7)${C_RESET} Add / configure a remote (multi-remote)"
-    echo -e "  ${C_GREEN}8)${C_RESET} Edit config file in \$EDITOR"
+    echo -e "  ${C_GREEN}8)${C_RESET} Set source root (e.g. /sdcard or /storage/emulated/0)"
+    echo -e "  ${C_GREEN}9)${C_RESET} Edit config file in \$EDITOR"
     echo -e "  ${C_GREEN}0)${C_RESET} Back"
     local c; c="$(ask 'Select' '0')"
     case "$c" in
-      1) set_conf_value RETENTION_KEEP "$(ask 'Keep how many newest backups' "$RETENTION_KEEP")"; ok "Saved." ;;
-      2) set_conf_value RETENTION_DAYS "$(ask 'Delete backups older than N days (0=off)' "$RETENTION_DAYS")"; ok "Saved." ;;
-      3) [ "$GUARD_ENABLE" = "true" ] && set_conf_value GUARD_ENABLE "false" || set_conf_value GUARD_ENABLE "true"; ok "Toggled." ;;
-      4) set_conf_value GUARD_MIN_BATTERY "$(ask 'Minimum battery %' "$GUARD_MIN_BATTERY")"; ok "Saved." ;;
-      5) [ "$GUARD_REQUIRE_WIFI" = "true" ] && set_conf_value GUARD_REQUIRE_WIFI "false" || set_conf_value GUARD_REQUIRE_WIFI "true"; ok "Toggled." ;;
-      6) declare -A PROFILE_MAP; list_profiles; local s; s="$(ask 'Default profile number' '1')"; [ -n "${PROFILE_MAP[$s]}" ] && set_conf_value DEFAULT_PROFILE "${PROFILE_MAP[$s]}"; ok "Saved." ;;
-      7) add_remote_flow ;;
-      8) "${EDITOR:-nano}" "$TNX_CONF" 2>/dev/null || vi "$TNX_CONF" ;;
-      *) return ;;
+       1) set_conf_value RETENTION_KEEP "$(ask 'Keep how many newest backups' "$RETENTION_KEEP")"; ok "Saved." ;;
+       2) set_conf_value RETENTION_DAYS "$(ask 'Delete backups older than N days (0=off)' "$RETENTION_DAYS")"; ok "Saved." ;;
+       3) [ "$GUARD_ENABLE" = "true" ] && set_conf_value GUARD_ENABLE "false" || set_conf_value GUARD_ENABLE "true"; ok "Toggled." ;;
+       4) set_conf_value GUARD_MIN_BATTERY "$(ask 'Minimum battery %' "$GUARD_MIN_BATTERY")"; ok "Saved." ;;
+       5) [ "$GUARD_REQUIRE_WIFI" = "true" ] && set_conf_value GUARD_REQUIRE_WIFI "false" || set_conf_value GUARD_REQUIRE_WIFI "true"; ok "Toggled." ;;
+       6) declare -A PROFILE_MAP; list_profiles; local s; s="$(ask 'Default profile number' '1')"; [ -n "${PROFILE_MAP[$s]}" ] && set_conf_value DEFAULT_PROFILE "${PROFILE_MAP[$s]}"; ok "Saved." ;;
+       7) add_remote_flow ;;
+       8) local sr; sr="$(ask 'Source root path' "$SOURCE_ROOT")"; [ -d "$sr" ] && { set_conf_value SOURCE_ROOT "$sr"; ok "Saved: $sr"; } || warn "Path does not exist: $sr" ;;
+       9) "${EDITOR:-nano}" "$TNX_CONF" 2>/dev/null || vi "$TNX_CONF" ;;
+       *) return ;;
     esac
   done
 }

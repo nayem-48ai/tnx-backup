@@ -15,18 +15,21 @@ scan_device() {
 
   info "Scanning $SOURCE_ROOT ... (this may take a moment)"
 
+  # Resolve symlinks and follow them so /sdcard -> real storage is scanned.
+  local SRC; SRC="$(readlink -f "$SOURCE_ROOT" 2>/dev/null || echo "$SOURCE_ROOT")"
+
   # --- Storage overview ---
   local dfline total used avail usep
-  dfline="$(df -h "$SOURCE_ROOT" 2>/dev/null | tail -1)"
+  dfline="$(df -h "$SRC" 2>/dev/null | tail -1)"
   total=$(echo "$dfline" | awk '{print $2}')
   used=$(echo "$dfline" | awk '{print $3}')
   avail=$(echo "$dfline" | awk '{print $4}')
   usep=$(echo "$dfline" | awk '{print $5}')
 
   local totalfiles totaldirs srcsize
-  totalfiles=$(find "$SOURCE_ROOT" -type f 2>/dev/null | wc -l)
-  totaldirs=$(find "$SOURCE_ROOT" -type d 2>/dev/null | wc -l)
-  srcsize=$(du -sh "$SOURCE_ROOT" 2>/dev/null | awk '{print $1}')
+  totalfiles=$(find -L "$SRC" -type f 2>/dev/null | wc -l)
+  totaldirs=$(find -L "$SRC" -type d 2>/dev/null | wc -l)
+  srcsize=$(du -sh "$SRC" 2>/dev/null | awk '{print $1}')
 
   echo
   echo -e "${C_BOLD}Storage:${C_RESET} total ${C_CYAN}$total${C_RESET} | used ${C_YELLOW}$used${C_RESET} | free ${C_GREEN}$avail${C_RESET} | usage $usep"
@@ -43,13 +46,13 @@ scan_device() {
   while IFS= read -r line; do
     b=$(echo "$line" | awk '{print $1}')
     p=$(echo "$line" | cut -f2-)
-    [ "$p" = "$SOURCE_ROOT" ] && continue
+    [ "$p" = "$SRC" ] && continue
     h=$(numfmt --to=iec --suffix=B "$b" 2>/dev/null)
     if [ -d "$p" ]; then t="folder"; else t="file"; fi
-    printf "  %-10s %s\n" "$h" "${p#$SOURCE_ROOT/}"
-    echo "\"${p#$SOURCE_ROOT/}\",\"$h\",$b,$t" >> "$csv"
-    rows+="<tr><td>${p#$SOURCE_ROOT/}</td><td>$h</td><td>$b</td><td>$t</td></tr>"
-  done < <(du -ab --max-depth=1 "$SOURCE_ROOT" 2>/dev/null | sort -rn)
+    printf "  %-10s %s\n" "$h" "${p#$SRC/}"
+    echo "\"${p#$SRC/}\",\"$h\",$b,$t" >> "$csv"
+    rows+="<tr><td>${p#$SRC/}</td><td>$h</td><td>$b</td><td>$t</td></tr>"
+  done < <(du -ab --max-depth=1 "$SRC" 2>/dev/null | sort -rn)
 
   hr
   # --- Largest 15 files ---
@@ -60,8 +63,23 @@ scan_device() {
     p=$(echo "$line" | cut -f2-)
     h=$(numfmt --to=iec --suffix=B "$b" 2>/dev/null)
     printf "  %-10s %s\n" "$h" "${p#$SOURCE_ROOT/}"
-    bigrows+="<tr><td>${p#$SOURCE_ROOT/}</td><td>$h</td></tr>"
-  done < <(find "$SOURCE_ROOT" -type f -printf '%s\t%p\n' 2>/dev/null | sort -rn | head -15)
+    bigrows+="<tr><td>${p#$SRC/}</td><td>$h</td></tr>"
+  done < <(find -L "$SRC" -type f -printf '%s\t%p\n' 2>/dev/null | sort -rn | head -15)
+
+  # --- Empty scan guard ---
+  if [ "$totalfiles" -eq 0 ] && [ "$totaldirs" -le 1 ]; then
+    hr
+    warn "No files were found at $SOURCE_ROOT (resolved: $SRC)."
+    if [ "$TNX_ENV" != "termux" ]; then
+      warn "You appear to be running inside a PRoot/distro where /sdcard is NOT bound"
+      warn "to your real Android storage. Run this tool from NATIVE TERMUX instead"
+      warn "(exit the Ubuntu shell, then: cd tnx-backup && ./tnxbackup.sh)."
+    else
+      warn "If this is unexpected, set the correct source in Settings (option 9 -> source root),"
+      warn "e.g. /storage/emulated/0, and ensure Termux has the 'All files access' permission."
+    fi
+    hr
+  fi
 
   # --- Write HTML report ---
   cat > "$html" <<HTML
