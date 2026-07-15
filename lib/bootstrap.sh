@@ -95,6 +95,57 @@ ensure_rclone() {
 export RCLONE_DISABLE_HTTP2=true
 export RCLONE_DISABLE_HTTP_KEEP_ALIVES=true
 
+# --- DNS resolution for the static rclone binary ---
+# rclone is a static Go binary. Go's resolver reads /etc/resolv.conf. In Termux
+# the resolver config lives at $PREFIX/etc/resolv.conf and /etc/resolv.conf often
+# DOES NOT EXIST. With no resolv.conf, Go falls back to localhost DNS ([::1]:53)
+# which is refused -> hostname lookup fails -> empty MEGA login reply
+# ("unexpected end of JSON input"). curl works because it uses Termux's resolver.
+# Fix: ensure a working /etc/resolv.conf exists (link Termux's, else public DNS).
+ensure_dns() {
+  local rf="/etc/resolv.conf"
+  local need_fix=0
+  if [ ! -f "$rf" ]; then
+    need_fix=1
+  else
+    local ns; ns="$(grep '^nameserver' "$rf" 2>/dev/null | awk '{print $2}')"
+    if [ -z "$ns" ]; then
+      need_fix=1
+    else
+      for n in $ns; do
+        case "$n" in 127.0.0.1|::1|0.0.0.0) ;; *) need_fix=0; break ;;
+      done
+    fi
+  fi
+  [ "$need_fix" = "0" ] && return 0
+
+  # Prefer Termux's own resolver if it has a real (non-localhost) nameserver.
+  if [ -n "${PREFIX:-}" ] && [ -f "$PREFIX/etc/resolv.conf" ]; then
+    local pns; pns="$(grep '^nameserver' "$PREFIX/etc/resolv.conf" 2>/dev/null | awk '{print $2}')"
+    local okp=0
+    for n in $pns; do case "$n" in 127.0.0.1|::1|0.0.0.0) ;; *) okp=1; break ;; esac; done
+    if [ "$okp" = "1" ]; then
+      info "Linking /etc/resolv.conf -> Termux resolver ($PREFIX/etc/resolv.conf)..."
+      ln -sf "$PREFIX/etc/resolv.conf" "$rf" 2>/dev/null && { ok "DNS fixed (Termux)."; return 0; }
+      cp "$PREFIX/etc/resolv.conf" "$rf" 2>/dev/null && { ok "DNS fixed (Termux)."; return 0; }
+    fi
+  fi
+
+  # Fallback: write public DNS so Go/rclone can resolve hostnames.
+  info "Creating /etc/resolv.conf with public DNS (rclone/Go needs it)..."
+  if [ -w "$(dirname "$rf")" ] || [ ! -e "$rf" ]; then
+    cat > "$rf" <<'EOF'
+nameserver 8.8.8.8
+nameserver 1.1.1.1
+nameserver 8.8.4.4
+EOF
+    ok "DNS fixed (public DNS: 8.8.8.8 / 1.1.1.1)."
+  else
+    warn "Cannot write $rf (no permission). If MEGA login fails, run manually:"
+    warn "  echo 'nameserver 8.8.8.8' > /etc/resolv.conf"
+  fi
+}
+
 # --- TLS / CA certificates ---
 # The static rclone build does NOT bundle CA certs and relies on the OS trust
 # store. We must point it at the CORRECT bundle for the environment:
@@ -188,6 +239,7 @@ portable_bootstrap() {
   fi
 
   migrate_rclone_config
+  ensure_dns
   ensure_jq
   ensure_ca
   ensure_rclone || die "rclone is required and could not be prepared."
