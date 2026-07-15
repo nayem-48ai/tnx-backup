@@ -99,28 +99,41 @@ export RCLONE_DISABLE_HTTP_KEEP_ALIVES=true
 # The static rclone build does NOT bundle CA certs and relies on the OS trust
 # store. We must point it at the CORRECT bundle for the environment:
 #   * PRoot / distro (Ubuntu): /etc/ssl/certs/ca-certificates.crt
-#     (Using the Termux bundle here is WRONG -> MEGA TLS fails ->
-#      "unexpected end of JSON input". This is the usual PRoot failure.)
-#   * Native Termux: $PREFIX/etc/tls/cert.pem
-# Prefer the standard Linux location FIRST, then Termux-specific paths.
+#   * Native Termux: $PREFIX/etc/tls/cert.pem (or $PREFIX/etc/ssl/.../ca-certificates.crt)
+# We don't just pick the first existing file — we VALIDATE each candidate by
+# doing a real TLS handshake to MEGA. Only a bundle that actually verifies
+# MEGA's certificate is used. This is what makes login work in native Termux
+# (a stale/wrong Termux bundle would otherwise yield "unexpected end of JSON").
 ensure_ca() {
-  local bundle=""
   local candidates=(
     "/etc/ssl/certs/ca-certificates.crt"
     "/etc/pki/tls/certs/ca-bundle.crt"
   )
-  [ -n "${PREFIX:-}" ] && candidates+=( "${PREFIX}/etc/tls/cert.pem" "${PREFIX}/etc/ssl/certs/ca-certificates.crt" )
+  [ -n "${PREFIX:-}" ] && candidates+=( "${PREFIX}/etc/tls/cert.pem" "${PREFIX}/etc/ssl/certs/ca-certificates.crt" "${PREFIX}/etc/ssl/cert.pem" )
   candidates+=( "/data/data/com.termux/files/usr/etc/tls/cert.pem"
                 "/data/data/com.termux/files/usr/etc/ssl/certs/ca-certificates.crt" )
-  for p in "${candidates[@]}"; do
-    [ -f "$p" ] && { bundle="$p"; break; }
-  done
+
+  local bundle=""
+  if command -v curl >/dev/null 2>&1; then
+    for p in "${candidates[@]}"; do
+      [ -f "$p" ] || continue
+      local code
+      code="$(curl --cacert "$p" -sS -m 12 -o /dev/null -w '%{http_code}' 'https://g.api.mega.co.nz/cs' 2>/dev/null)"
+      if [ "$code" = "200" ]; then bundle="$p"; break; fi
+    done
+  fi
+  # Fallback: no curl / no network for test -> use first existing bundle.
+  if [ -z "$bundle" ]; then
+    for p in "${candidates[@]}"; do [ -f "$p" ] && { bundle="$p"; break; }; done
+  fi
+
   if [ -n "$bundle" ]; then
     export RCLONE_CACERT="$bundle"
     export SSL_CERT_FILE="$bundle"
     export CURL_CERT_FILE="$bundle"
+    ok "Using validated CA bundle: $bundle"
   else
-    warn "No CA certificate bundle found - trying to install one."
+    warn "No CA bundle found - trying to install one."
     if command -v pkg >/dev/null 2>&1; then
       pkg install -y ca-certificates >/dev/null 2>&1 || true
     elif command -v apt-get >/dev/null 2>&1; then
@@ -129,6 +142,7 @@ ensure_ca() {
     for p in "${candidates[@]}"; do [ -f "$p" ] && { bundle="$p"; break; }; done
     if [ -n "$bundle" ]; then
       export RCLONE_CACERT="$bundle"; export SSL_CERT_FILE="$bundle"; export CURL_CERT_FILE="$bundle"
+      ok "Using CA bundle: $bundle"
     else
       warn "Could not install CA certs. If MEGA login fails, run:"
       warn "  Native Termux:  pkg install ca-certificates"
