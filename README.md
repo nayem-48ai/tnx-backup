@@ -88,6 +88,28 @@ That's it. Anyone can clone and run on their own device with their own MEGA acco
 
 ---
 
+## 🧹 Delete / start fresh (uninstall)
+
+To remove **everything** and return to a clean state (so you can set up as a brand-new user), run:
+
+```bash
+rm -rf ~/tnx-backup          # the tool, its ./bin, config, logs, reports
+pkg uninstall -y rclone      # remove rclone (Termux) — skip if you use rclone elsewhere
+rm -rf ~/.config/rclone      # your MEGA credentials / remote config
+# optional: pkg uninstall -y jq   # only if you installed jq system-wide
+```
+
+This deletes all local config and saved MEGA credentials. To become a new user again, just re-run the one-liner:
+
+```bash
+git clone https://github.com/nayem-48ai/tnx-backup && cd tnx-backup && ./tnxbackup.sh
+```
+
+> 💡 This only removes the tool and its config **on this device**. Your files in MEGA
+> stay in the cloud — re-adding the same MEGA account (menu **11**) will see them again.
+
+---
+
 ## 🖐️ First run
 
 The **first-run wizard** launches automatically and will:
