@@ -157,6 +157,7 @@ EOF
 # MEGA's certificate is used. This is what makes login work in native Termux
 # (a stale/wrong Termux bundle would otherwise yield "unexpected end of JSON").
 ensure_ca() {
+  ensure_dns   # guarantee a working /etc/resolv.conf before any network use
   local candidates=(
     "/etc/ssl/certs/ca-certificates.crt"
     "/etc/pki/tls/certs/ca-bundle.crt"

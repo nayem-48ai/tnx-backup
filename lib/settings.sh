@@ -86,6 +86,7 @@ self_update() {
 tool_diag() {
   banner; title "  DIAGNOSTICS"; hr
   ensure_ca
+  ensure_rclone
   local rc; rc="$(command -v rclone || echo 'NOT FOUND')"
   echo -e "  rclone path    : ${C_CYAN}$rc${C_RESET}"
   echo -e "  rclone version : ${C_CYAN}$(rclone version 2>/dev/null | head -1 || echo '?')${C_RESET}"
