@@ -50,3 +50,49 @@ add_remote_flow() {
   setup_mega_remote "$name"   # handles creation, test, and registration
   pause
 }
+
+# --- Auto-update the tool from GitHub ---
+self_update() {
+  require_cmd git || { err "git not installed. Run: pkg install git"; return 1; }
+  [ -d "$TNX_ROOT/.git" ] || { err "Not a git checkout - cannot auto-update."; return 1; }
+  info "Fetching updates from GitHub..."
+  git -C "$TNX_ROOT" fetch --quiet origin 2>&1 | tail -3
+  local behind; behind="$(git -C "$TNX_ROOT" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)"
+  if [ "$behind" = "0" ] || [ -z "$behind" ]; then
+    ok "Already up to date."; return 0
+  fi
+  info "Pulling $behind commit(s)..."
+  if git -C "$TNX_ROOT" pull --ff-only 2>&1 | tail -6; then
+    ok "Updated. Restart the tool (./tnxbackup.sh) to use the new version."
+  else
+    err "Update failed (local changes conflict?). Try: cd $TNX_ROOT && git stash && git pull"
+    return 1
+  fi
+}
+
+# --- Diagnostics: pinpoint login / network / config problems ---
+tool_diag() {
+  banner; title "  DIAGNOSTICS"; hr
+  ensure_ca
+  local rc; rc="$(command -v rclone || echo 'NOT FOUND')"
+  echo -e "  rclone path    : ${C_CYAN}$rc${C_RESET}"
+  echo -e "  rclone version : ${C_CYAN}$(rclone version 2>/dev/null | head -1 || echo '?')${C_RESET}"
+  echo -e "  has MEGA backend: ${C_CYAN}$(rclone help backends 2>/dev/null | grep -qi '^  mega' && echo yes || echo NO)${C_RESET}"
+  echo -e "  rclone config  : ${C_CYAN}${RCLONE_CONFIG}${C_RESET} $([ -f "$RCLONE_CONFIG" ] && echo "(exists)" || echo "(missing)")"
+  echo -e "  CA bundle      : ${C_CYAN}${RCLONE_CACERT:-<default system>}${C_RESET}"
+  echo -e "  SSL_CERT_FILE  : ${C_CYAN}${SSL_CERT_FILE:-<unset>}${C_RESET}"
+  hr
+  echo -e "  ${C_BOLD}Remotes defined in config:${C_RESET}"
+  rclone listremotes 2>/dev/null | sed 's/^/   /' || echo "   (none / error)"
+  hr
+  echo -e "  ${C_BOLD}Network test to MEGA:${C_RESET}"
+  local r; r="$(rclone listremotes 2>/dev/null | head -1 | tr -d ':')"
+  if [ -n "$r" ]; then
+    echo -e "   testing remote '${r}'..."
+    out="$(timeout 45 rclone about "${r}:" 2>&1)"
+    echo "$out" | grep -E "Total:|error|Error|CRITICAL|denied|failed" | sed 's/^/   /'
+  else
+    echo -e "   ${C_YELLOW}No remote configured yet - use menu 11.${C_RESET}"
+  fi
+  hr
+}

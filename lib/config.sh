@@ -104,9 +104,11 @@ setup_mega_remote() {
     ok "MEGA connection successful."
   else
     warn "Connection test did not pass yet."
-    echo -e "   ${C_DIM}This is often temporary MEGA login rate-limiting after several"
-    echo -e "   logins in a short time. Wait a few minutes, then use menu option 10"
-    echo -e "   (Self-test) or 11 again. Your credentials are saved.${C_RESET}"
+    echo -e "   ${C_DIM}Common causes & fixes:${C_RESET}"
+    echo -e "   ${C_DIM}• TLS/CA issue: run  pkg install ca-certificates  then retry${C_RESET}"
+    echo -e "   ${C_DIM}• MEGA rate-limiting: wait a few minutes, then retry${C_RESET}"
+    echo -e "   ${C_DIM}• Network/proxy blocking MEGA: try a different Wi-Fi/mobile data${C_RESET}"
+    echo -e "   ${C_DIM}Run menu option 13 'Diagnostics' for details. Credentials are saved.${C_RESET}"
   fi
 
   # --- Register remote into REMOTES so backups can find it ---

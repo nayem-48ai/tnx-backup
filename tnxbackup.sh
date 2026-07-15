@@ -50,23 +50,27 @@ main_menu() {
     echo -e "  ${C_GREEN}9)${C_RESET} ⚙️   Settings"
     echo -e "  ${C_GREEN}10)${C_RESET} 🩺  Self-test / health check"
     echo -e "  ${C_GREEN}11)${C_RESET} 🔑  Setup / add MEGA account"
+    echo -e "  ${C_GREEN}12)${C_RESET} ⬆️   Update tool (git pull)"
+    echo -e "  ${C_GREEN}13)${C_RESET} 🔎  Diagnostics"
     echo -e "  ${C_GREEN}0)${C_RESET} 🚪  Exit"
     hr
     local c; c="$(ask 'Choose an option' '')"
     case "$c" in
-      1) scan_device ;;
-      2) backup_mirror "copy" ;;
-      3) backup_mirror "sync" ;;
-      4) backup_zip ;;
-      5) restore_menu ;;
-      6) cloud_status ;;
-      7) clean_cloud ;;
-      8) show_history ;;
-      9) settings_menu; load_config ;;
-      10) self_test ;;
-      11) setup_mega_remote ""; pause ;;
-      0) echo -e "${C_CYAN}Goodbye!${C_RESET}"; exit 0 ;;
-      *) warn "Invalid option."; sleep 1 ;;
+       1) scan_device ;;
+       2) backup_mirror "copy" ;;
+       3) backup_mirror "sync" ;;
+       4) backup_zip ;;
+       5) restore_menu ;;
+       6) cloud_status ;;
+       7) clean_cloud ;;
+       8) show_history ;;
+       9) settings_menu; load_config ;;
+       10) self_test ;;
+       11) setup_mega_remote ""; pause ;;
+       12) self_update; pause ;;
+       13) tool_diag; pause ;;
+       0) echo -e "${C_CYAN}Goodbye!${C_RESET}"; exit 0 ;;
+       *) warn "Invalid option."; sleep 1 ;;
     esac
   done
 }
@@ -84,7 +88,9 @@ cli() {
     restore)     restore_menu ;;
     status)      cloud_status ;;
     selftest)    self_test ;;
-    *) echo "Usage: tnxbackup.sh [scan|backup|incremental|zip|restore|status|selftest]"; exit 1 ;;
+    update)      self_update ;;
+    diag)        tool_diag ;;
+    *) echo "Usage: tnxbackup.sh [scan|backup|incremental|zip|restore|status|selftest|update|diag]"; exit 1 ;;
   esac
 }
 
@@ -95,5 +101,6 @@ if [ $# -gt 0 ]; then
   cli "$@"
 else
   bootstrap
+  update_check
   main_menu
 fi

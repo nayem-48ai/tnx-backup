@@ -14,6 +14,10 @@ TNX_LOGDIR="$TNX_ROOT/logs"
 TNX_REPORTDIR="$TNX_ROOT/reports"
 TNX_HISTORY="$TNX_ROOT/logs/history.json"
 
+# Keep rclone's remote config INSIDE the project so it's easy to find/backup.
+# (rclone defaults to ~/.config/rclone/rclone.conf otherwise.)
+export RCLONE_CONFIG="$TNX_CONF_DIR/rclone.conf"
+
 mkdir -p "$TNX_LOGDIR" "$TNX_REPORTDIR" "$TNX_PROFILES"
 
 # --- Colors (auto-disable if not a terminal) ---

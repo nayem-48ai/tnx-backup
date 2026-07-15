@@ -42,17 +42,31 @@ _dl() {
 }
 
 # --- Ensure portable rclone ---
+# We ALWAYS prefer our own ./bin/rclone. A system rclone (e.g. apt/Termux
+# package) may predate/lack the MEGA backend or be broken, which produces
+# cryptic errors like "unexpected end of JSON input". Only fall back to a
+# system rclone if we cannot download our own.
 ensure_rclone() {
-  if command -v rclone >/dev/null 2>&1 && rclone help backends 2>/dev/null | grep -qi '^  mega'; then
-    return 0   # a MEGA-capable rclone already available
-  fi
   local os arch url tmp d
   os="$(detect_os)"; arch="$(detect_arch)"
   [ "$arch" = "unknown" ] && { err "Unsupported CPU arch: $(uname -m)"; return 1; }
+
+  if [ -x "$TNX_BIN/rclone" ] && "$TNX_BIN/rclone" help backends 2>/dev/null | grep -qi '^  mega'; then
+    return 0   # our portable, MEGA-capable binary is good
+  fi
+
   url="https://downloads.rclone.org/rclone-current-${os}-${arch}.zip"
   info "Downloading portable rclone ($os-$arch)..."
   tmp="$(mktemp -d)"
-  if ! _dl "$url" "$tmp/rclone.zip"; then err "Download failed (need curl/wget)."; rm -rf "$tmp"; return 1; fi
+  if ! _dl "$url" "$tmp/rclone.zip"; then
+    rm -rf "$tmp"
+    # Fallback: try any system rclone that has the MEGA backend
+    if command -v rclone >/dev/null 2>&1 && rclone help backends 2>/dev/null | grep -qi '^  mega'; then
+      warn "Using system rclone (download failed). If login fails, run: pkg install ca-certificates"
+      return 0
+    fi
+    err "Download failed (need curl/wget + internet)."; return 1
+  fi
   if command -v unzip >/dev/null 2>&1; then
     unzip -oq "$tmp/rclone.zip" -d "$tmp"
   elif command -v python3 >/dev/null 2>&1; then
@@ -66,7 +80,44 @@ ensure_rclone() {
   cp "$d/rclone" "$TNX_BIN/rclone" && chmod +x "$TNX_BIN/rclone"
   rm -rf "$tmp"
   hash -r
-  command -v rclone >/dev/null 2>&1 && ok "Portable rclone ready: $(rclone version | head -1)" || return 1
+  if [ -x "$TNX_BIN/rclone" ] && "$TNX_BIN/rclone" help backends 2>/dev/null | grep -qi '^  mega'; then
+    ok "Portable rclone ready: $("$TNX_BIN/rclone" version | head -1)"
+  else
+    err "Downloaded rclone lacks MEGA backend."; return 1
+  fi
+}
+
+# --- TLS / CA certificates ---
+# The static rclone build does NOT bundle CA certs. On Termux, if the
+# ca-certificates package is missing, TLS to MEGA fails and rclone returns
+# "unexpected end of JSON input" (empty response). Point rclone at the
+# system CA bundle so logins succeed.
+ensure_ca() {
+  local bundle=""
+  for p in "${PREFIX:+${PREFIX}/etc/tls/cert.pem}" \
+           "${PREFIX:+${PREFIX}/etc/ssl/certs/ca-certificates.crt}" \
+           "/data/data/com.termux/files/usr/etc/tls/cert.pem" \
+           "/data/data/com.termux/files/usr/etc/ssl/certs/ca-certificates.crt" \
+           "/etc/ssl/certs/ca-certificates.crt"; do
+    [ -f "$p" ] && { bundle="$p"; break; }
+  done
+  if [ -n "$bundle" ]; then
+    export RCLONE_CACERT="$bundle"
+    export SSL_CERT_FILE="$bundle"
+    export CURL_CERT_FILE="$bundle"
+  else
+    warn "No CA certificate bundle found. If MEGA login fails with a JSON error,"
+    warn "run:  pkg install ca-certificates   then restart the tool."
+  fi
+}
+
+# --- Migrate any pre-existing rclone remote config into the project ---
+migrate_rclone_config() {
+  local def="$HOME/.config/rclone/rclone.conf"
+  if [ ! -f "$TNX_CONF_DIR/rclone.conf" ] && [ -f "$def" ] && [ -s "$def" ]; then
+    cp "$def" "$TNX_CONF_DIR/rclone.conf"
+    ok "Imported existing rclone remotes from $def into the project."
+  fi
 }
 
 # --- Ensure portable jq ---
@@ -96,8 +147,21 @@ portable_bootstrap() {
     ZIP_COMPRESSOR="gzip"   # graceful fallback for this run
   fi
 
+  migrate_rclone_config
   ensure_jq
+  ensure_ca
   ensure_rclone || die "rclone is required and could not be prepared."
   ok "All tools ready (portable)."
   hr
+}
+
+# Lightweight, non-blocking update check (prints only if behind).
+update_check() {
+  require_cmd git || return 0
+  [ -d "$TNX_ROOT/.git" ] || return 0
+  git -C "$TNX_ROOT" fetch --quiet origin 2>/dev/null || return 0
+  local behind; behind="$(git -C "$TNX_ROOT" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)"
+  if [ "$behind" != "0" ] && [ -n "$behind" ]; then
+    echo -e "${C_YELLOW}[!] Update available ($behind commit(s)). Run menu option 12 to update.${C_RESET}"
+  fi
 }

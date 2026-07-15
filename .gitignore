@@ -8,6 +8,10 @@ logs/history.json
 reports/*.html
 reports/*.csv
 
+# rclone remote config now lives inside the project (holds MEGA credentials) - never commit it
+config/rclone.conf
+config/rclone.conf.*
+
 # rclone config lives in user's rclone config dir, never here
 *.conf.local
 logs/*.log
