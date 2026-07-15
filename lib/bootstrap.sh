@@ -42,28 +42,65 @@ _dl() {
 }
 
 # --- Ensure portable rclone ---
-# We ALWAYS prefer our own ./bin/rclone. A system rclone (e.g. apt/Termux
-# package) may predate/lack the MEGA backend or be broken, which produces
-# cryptic errors like "unexpected end of JSON input". Only fall back to a
-# system rclone if we cannot download our own.
+# Preference order:
+#   1) A SYSTEM rclone that has the MEGA backend (e.g. Termux's `pkg` build).
+#      Termux's rclone is compiled with cgo and uses the OS resolver, so it
+#      works even when /etc/resolv.conf is missing/unwritable. The static
+#      official binary is pure-Go and reads /etc/resolv.conf; on Termux
+#      /etc -> /system/etc (read-only) so it can NEVER resolve DNS there ->
+#      "unexpected end of JSON input". So on Termux the system rclone is
+#      REQUIRED and preferred.
+#   2) Our own portable static ./bin/rclone (good on desktop/PRoot where
+#      /etc/resolv.conf is writable).
+#   3) Auto-install via pkg on Termux if nothing works.
+#   4) Download the portable static build as a last resort.
 ensure_rclone() {
   local os arch url tmp d
   ensure_dns   # Go/rclone need a working /etc/resolv.conf (missing in Termux)
   os="$(detect_os)"; arch="$(detect_arch)"
   [ "$arch" = "unknown" ] && { err "Unsupported CPU arch: $(uname -m)"; return 1; }
 
-  if [ -x "$TNX_BIN/rclone" ] && "$TNX_BIN/rclone" help backends 2>/dev/null | grep -qi '^  mega'; then
-    return 0   # our portable, MEGA-capable binary is good
+  # 1) system rclone, but NOT our own ./bin/rclone (which we prepend to PATH)
+  local p found=""
+  IFS=':'; for p in $PATH; do
+    [ "$p" = "$TNX_BIN" ] && continue
+    if [ -x "$p/rclone" ] && "$p/rclone" help backends 2>/dev/null | grep -qi '^  mega'; then
+      found="$p/rclone"; break
+    fi
+  done; unset IFS
+  if [ -n "$found" ]; then
+    info "Using system rclone: $found"
+    rm -f "$TNX_BIN/rclone"   # don't shadow the working system binary via PATH
+    hash -r
+    return 0
   fi
 
+  # 2) our portable static binary
+  if [ -x "$TNX_BIN/rclone" ] && "$TNX_BIN/rclone" help backends 2>/dev/null | grep -qi '^  mega'; then
+    return 0
+  fi
+
+  # 3) on Termux, try to install rclone (cgo build, works with OS DNS)
+  if [ "$TNX_ENV" = "termux" ] && command -v pkg >/dev/null 2>&1; then
+    info "Installing rclone via pkg (needed for MEGA on Termux)..."
+    if pkg install -y rclone >/dev/null 2>&1; then
+      if command -v rclone >/dev/null 2>&1 && rclone help backends 2>/dev/null | grep -qi '^  mega'; then
+        info "Using system rclone: $(command -v rclone)"
+        rm -f "$TNX_BIN/rclone"
+        hash -r
+        return 0
+      fi
+    fi
+  fi
+
+  # 4) download the portable static build
   url="https://downloads.rclone.org/rclone-current-${os}-${arch}.zip"
   info "Downloading portable rclone ($os-$arch)..."
   tmp="$(mktemp -d)"
   if ! _dl "$url" "$tmp/rclone.zip"; then
     rm -rf "$tmp"
-    # Fallback: try any system rclone that has the MEGA backend
     if command -v rclone >/dev/null 2>&1 && rclone help backends 2>/dev/null | grep -qi '^  mega'; then
-      warn "Using system rclone (download failed). If login fails, run: pkg install ca-certificates"
+      warn "Using system rclone (download failed)."
       return 0
     fi
     err "Download failed (need curl/wget + internet)."; return 1
@@ -135,12 +172,17 @@ ensure_dns() {
   # Fallback: write public DNS so Go/rclone can resolve hostnames.
   info "Creating /etc/resolv.conf with public DNS (rclone/Go needs it)..."
   if [ -w "$(dirname "$rf")" ] || [ ! -e "$rf" ]; then
-    cat > "$rf" <<'EOF'
+    if cat > "$rf" <<'EOF'
 nameserver 8.8.8.8
 nameserver 1.1.1.1
 nameserver 8.8.4.4
 EOF
-    ok "DNS fixed (public DNS: 8.8.8.8 / 1.1.1.1)."
+    then
+      ok "DNS fixed (public DNS: 8.8.8.8 / 1.1.1.1)."
+    else
+      warn "Could not write $rf (read-only filesystem). The static rclone build"
+      warn "cannot resolve DNS here; install Termux's rclone instead: pkg install rclone"
+    fi
   else
     warn "Cannot write $rf (no permission). If MEGA login fails, run manually:"
     warn "  echo 'nameserver 8.8.8.8' > /etc/resolv.conf"
