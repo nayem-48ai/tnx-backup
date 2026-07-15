@@ -48,6 +48,7 @@ _dl() {
 # system rclone if we cannot download our own.
 ensure_rclone() {
   local os arch url tmp d
+  ensure_dns   # Go/rclone need a working /etc/resolv.conf (missing in Termux)
   os="$(detect_os)"; arch="$(detect_arch)"
   [ "$arch" = "unknown" ] && { err "Unsupported CPU arch: $(uname -m)"; return 1; }
 
