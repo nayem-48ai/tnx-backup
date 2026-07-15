@@ -106,16 +106,17 @@ setup_mega_remote() {
     warn "Connection test did not pass yet."
     echo -e "   ${C_DIM}Checking if MEGA is reachable from this network...${C_RESET}"
     if mega_reachable >/dev/null 2>&1; then
-      echo -e "   ${C_DIM}MEGA API is reachable, so the empty login reply is one of:${C_RESET}"
-      echo -e "   ${C_DIM}1) Temporary account lockout from too many logins. FIX: open${C_RESET}"
-      echo -e "   ${C_DIM}   https://mega.nz in a browser, go to Settings > Security >${C_RESET}"
-      echo -e "   ${C_DIM}   'Close all sessions', then wait ~10 min and retry.${C_RESET}"
-      echo -e "   ${C_DIM}2) Carrier/proxy truncating MEGA's login reply. FIX: try a VPN${C_RESET}"
-      echo -e "   ${C_DIM}   or a different network.${C_RESET}"
+      echo -e "   ${C_RED}MEGA API is reachable (HTTP 200) but the LOGIN reply comes back EMPTY.${C_RESET}"
+      echo -e "   ${C_DIM}This is your carrier / Wi-Fi proxy blocking or truncating MEGA's login${C_RESET}"
+      echo -e "   ${C_DIM}response. It is NOT the account, the password, or the tool (the same${C_RESET}"
+      echo -e "   ${C_DIM}credentials log in fine from another network). A different rclone build${C_RESET}"
+      echo -e "   ${C_DIM}will NOT help — the portable binary IS the official full rclone.${C_RESET}"
+      echo -e "   ${C_BOLD}Fix: enable a VPN (e.g. Cloudflare WARP / Proton / any VPN app) and retry,${C_RESET}"
+      echo -e "   ${C_BOLD}   or switch to a different Wi-Fi / mobile data connection.${C_RESET}"
     else
       local code; code="$(mega_reachable 2>/dev/null)"
       echo -e "   ${C_RED}MEGA API is NOT reachable from this network (HTTP ${code:-no response}).${C_RESET}"
-      echo -e "   ${C_DIM}This is a network/region block on MEGA. Try a VPN or another network.${C_RESET}"
+      echo -e "   ${C_DIM}This is a network/region block on MEGA. Use a VPN or another network.${C_RESET}"
     fi
     echo -e "   ${C_DIM}Run menu option 13 'Diagnostics' (it saves a raw login capture)${C_RESET}"
     echo -e "   ${C_DIM}for deeper analysis. Credentials are saved.${C_RESET}"
@@ -131,7 +132,7 @@ test_remote() {
   local r="$1" i out
   for i in 1 2 3 4 5; do
     info "Testing connection (attempt $i/5)..."
-    out="$(timeout 60 rclone about "${r}:" --low-level-retries 10 --contimeout 30s --timeout 60s --retries 3 2>&1)"
+    out="$(timeout 60 rclone about "${r}:" --low-level-retries 10 --contimeout 30s --timeout 60s --retries 3 --disable-http-keep-alives 2>&1)"
     if echo "$out" | grep -q "Total:"; then
       echo "$out" | grep -E "Total:|Used:|Free:" | sed 's/^/   /'
       return 0

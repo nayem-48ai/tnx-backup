@@ -87,12 +87,13 @@ ensure_rclone() {
   fi
 }
 
-# --- Force HTTP/1.1 for rclone ---
+# --- Force HTTP/1.1 + disable keep-alives for rclone ---
 # Some mobile carriers / transparent proxies mangle HTTP/2 (chunked) responses
-# from MEGA, which makes rclone receive an empty body and fail with
-# "unexpected end of JSON input". Forcing HTTP/1.1 (content-length framed)
-# avoids that truncation. Safe and applies to all rclone calls.
+# or drop keep-alive connections mid-login, which makes rclone receive an empty
+# body and fail with "unexpected end of JSON input". These flags make the
+# transport as proxy-friendly as possible. Safe; apply to all rclone calls.
 export RCLONE_DISABLE_HTTP2=true
+export RCLONE_DISABLE_HTTP_KEEP_ALIVES=true
 
 # --- TLS / CA certificates ---
 # The static rclone build does NOT bundle CA certs. On Termux, if the
