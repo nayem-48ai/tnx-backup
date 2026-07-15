@@ -113,7 +113,7 @@ ensure_dns() {
       need_fix=1
     else
       for n in $ns; do
-        case "$n" in 127.0.0.1|::1|0.0.0.0) ;; *) need_fix=0; break ;;
+        case "$n" in 127.0.0.1|::1|0.0.0.0) ;; *) need_fix=0; break ;; esac
       done
     fi
   fi
